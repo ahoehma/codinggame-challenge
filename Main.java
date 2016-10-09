@@ -40,27 +40,29 @@ class Player {
     }
     
     static class Graph {
-        float distance(Node a, Node b) { return P.dist(a.pos, b.pos); };
+        float distance(Node a, Node b) { return P.dist(a.pos, b.pos); }
     }
     
-    class Distance<A extends Node, B extends Node> {
-        A a;
-        B b;
+    static class Distance<T extends Node, I extends Node> {
+        T a;
+        I b;
         float dist;
-        static <A extends Node, B extends Node> Distance of(A a, B b){ Distance<A,B> d = new Distance<>(); d.a=a; d.b=b; d.dist=P.dist(a.pos,b.pos); return d; };
+        Distance (T a, I b) { this.a=a; this.b=b; this.dist=P.dist(a.pos,b.pos); }
+        static <A extends Node, B extends Node> Distance<A,B> of(A a, B b){ Distance<A,B> d = new Distance<>(a, b); return d; }
     }
     
-    class Damage extends Distance<E, E> {
+    static class Damage extends Distance<E, E> {
         float damage;
-        static Damage of(E a, E b){ Damage d = new Damage<>(a, b); d.damage=damage(d.dist); return d; };
+        Damage (E a, E b) { super(a,b); this.damage=damage(dist); }
+        static Damage of(E a, E b){ Damage d = new Damage(a,b); return d; }
     }
     
-    static DP[] dp;
-    static E[] e;
-    static Distance<E, E>[] me2e_Dist;
-    static Distance<E, DP>[] me2dp_Dist;
-    static Distance<E, DP>[] e2dp_Dist;
-    static Damage[] me2e_Damage;
+    static List<DP> dp = new ArrayList<>();
+    static List<E> e = new ArrayList<>();
+    static List<Distance<E, E>> me2e_Dist = new ArrayList<>();
+    static List<Distance<E, DP>> me2dp_Dist = new ArrayList<>();
+    static List<Distance<E, DP>> e2dp_Dist = new ArrayList<>();
+    static List<Damage> me2e_Damage = new ArrayList<>();
     
     static P me;
     
@@ -74,6 +76,13 @@ class Player {
     
         // game loop
         while (true) {
+            
+            dp.clear();
+            e.clear();
+            me2e_Dist.clear();
+            me2dp_Dist.clear();
+            e2dp_Dist.clear();
+            me2e_Damage.clear();
             
             // read input
             int x = in.nextInt();
@@ -98,21 +107,19 @@ class Player {
             }
 
             // calculate distances
-            e2dp_Dist=new Distance<>[enemyCount*dataCount];
-            me2dp_Dist=new Distance<>[dataCount];
-            me2e_Dist=new Distance<>[enemyCount];
-            me2e_Damage=new Damage<>[enemyCount];
             for (int j = 0; j < dataCount; j++) {
                 for (int i = 0; i < enemyCount; i++) {
-                    e2dp_Dist[i*j]=Distance.of(e[i], dp[j]);
+                    e2dp_Dist.add(Distance.of(e[i], dp[j]));
                 }
-                me2dp_Dist[j]=Distance.of(me, dp[j]);
+                me2dp_Dist.add(Distance.of(me, dp[j]));
             }
             for (int i = 0; i < enemyCount; i++) {
-                me2e_Dist[i]=Distance.of(me, e[i]);
+                me2e_Dist.add(Distance.of(me, e[i]));
                 // calculate damages too
-                me2e_Damage[i]=Distance.of(me, e[i]);
+                me2e_Damage.add(Distance.of(me, e[i]));
             }
+            
+            
             
             int e_dist_dp = e2dp_Dist[closestDistE2DP.idx][closestDistDP.idx];
             int steps_e_2_dp = e_dist_dp/500;  // 500 dist per enemy move
@@ -165,7 +172,7 @@ class Player {
     static void shoot(int idx) {System.out.println("SHOOT "+e[idx].id);}
     static void go2e(int idx) {System.out.println("MOVE "+(int)e[idx].pos.x+" "+(int)e[idx].pos.y);}
     
-    static double damage(float distance) {return 125000f/Math.pow(distance, 1.2f);}
+    static float damage(float distance) {return (float)(125000f/Math.pow(distance, 1.2f));}
     
     static int h(int idx) {return e[idx].life;}
     static String e(int idx) {return e[idx].toString(); }
