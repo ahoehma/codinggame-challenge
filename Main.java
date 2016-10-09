@@ -18,7 +18,8 @@ class Player {
         P mul(int s) { x*=s; y*=s; return this; }
         float lenght() { return (float) Math.sqrt(x*x+y*y);}
         static float dist(P a, P b){ return a.cp().sub(b).lenght(); };
-        static P of(int x, int y) { P np = new P(); np.x=x; np.y=y; return np; };
+        static P of(float x, float y) { P np = new P(); np.x=x; np.y=y; return np; };
+        public String toString() { return "P("+x+","+y+")"; }
     };
     
     static class Node {
@@ -26,18 +27,18 @@ class Player {
     }
     
     static class DP extends Node {
-        int id;
-        int idx;
-        static DP of(int idx, int id, int x, int y) { DP ndp=new DP(); ndp.idx=idx; ndp.id=id; ndp.pos=P.of(x,y); return ndp; }
-        public String toString() { return id+""; }
+        float id;
+        float idx;
+        static DP of(int idx, int id, float x, float y) { DP ndp=new DP(); ndp.idx=idx; ndp.id=id; ndp.pos=P.of(x,y); return ndp; }
+        public String toString() { return "DP("+id+")"; }
     }
     
     static class E extends Node {
         int id;
         int idx;
         int life;
-        static E of(int idx, int id, int x, int y, int life) { E ne=new E(); ne.idx=idx; ne.id=id; ne.pos=P.of(x,y); ne.life=life; return ne; }
-        public String toString() { return id+"("+life+")"; }
+        static E of(int idx, int id, float x, float y, int life) { E ne=new E(); ne.idx=idx; ne.id=id; ne.pos=P.of(x,y); ne.life=life; return ne; }
+        public String toString() { return "E("+id+"/life:"+life+")"; }
     }
     
     static class Graph {
@@ -49,13 +50,13 @@ class Player {
         B b;
         float dist;
         Distance (A a, B b) { this.a=a; this.b=b; this.dist=P.dist(a.pos,b.pos); }
-        public String toString() { return a+"("+dist+")"+b; }
+        public String toString() { return a+" <= "+dist+" => "+b; }
     }
     
     static class Damage extends Distance<E, E> {
         float damage;
         Damage (E a, E b) { super(a,b); this.damage=damage(dist); }
-        public String toString() { return a+"<-"+dist+"/"+damage+"->"+b; }
+        public String toString() { return a+" <= "+dist+"/"+damage+" => "+b; }
     }
     
     static List<DP> dp = new ArrayList<>();
@@ -76,7 +77,7 @@ class Player {
         // 16 x 9
     
         // game loop
-        while (true) {
+        game_loop: while (true) {
             
             dp.clear();
             e.clear();
@@ -118,65 +119,96 @@ class Player {
                 me2e_Damage.add(new Damage(me, e.get(i)));
             }
             
-            Distance<E, DP> minDistE2DP = e2dp_Dist.stream().min((d1,d2)->Float.compare(d1.dist, d2.dist)).orElse(null);
-            Damage maxDamageMe2E = me2e_Damage.stream().max((d1,d2)->Float.compare(d1.damage, d2.damage)).orElse(null);
+            List<E> skipEnemy = new ArrayList<>();
             
-            System.err.println("Min distance: "+minDistE2DP);
-            System.err.println("Max damage: "+maxDamageMe2E);
+            int loop = 0;
             
-            //int steps_e_2_dp = (int)minDistE2DP.dist/500;  // 500 dist per enemy move
-            //int steps_e_2_kill = (int)(maxDamageMe2E.a.life/maxDamageMe2E.damage);
+            while(skipEnemy.size() < e.size()) {
             
-            //System.err.println("Steps for e to dp - steps: "+steps_e_2_dp+", dist: "+minDistE2DP.dist);
-            //System.err.println("Steps to kill e - steps: "+steps_e_2_kill+", damage: "+maxDamageMe2E.damage+", dist: "+maxDamageMe2E.dist);
+                // until unchecked enemies
+                loop++;
+                System.err.println("Loop "+loop);
             
-            
-            //if (steps_e_2_dp < steps_e_2_kill && safe_distance(closestDistE2DP.idx) && safe_place_if_go2e(closestDistE2DP.idx)) {
-            //    go2e(closestDistE2DP.idx);
-            //    continue;
-            //}
-            
-            //if (e2dp_Dist[closestDistE2DP.idx][closestDistDP.idx]>=2500 && safe_distance(closestDistE2DP.idx)) {
-                // e more than 4 steps away from dp
-                // e 6 steps away from me
-            //    go2e(closestDistE2DP.idx);
-            //    continue;
-            //}
-            
-            //shoot(closestDistE2DP.idx);
-
-            System.out.println("MOVE 8000 4500"); // MOVE x y or SHOOT id
+                Distance<E, DP> minDistE2DP = e2dp_Dist.stream().filter(d->!skipEnemy.contains(d.a)).min((d1,d2)->Float.compare(d1.dist, d2.dist)).orElse(null);
+                Damage maxDamage = me2e_Damage.stream().filter(d->!skipEnemy.contains(d.a)).max((d1,d2)->Float.compare(d1.damage, d2.damage)).orElse(null);
+                
+                System.err.println("Min distance e to dp: "+minDistE2DP);
+                System.err.println("Max damage me to e: "+maxDamage);
+                
+                if (minDistE2DP.a == maxDamage.b) {
+                    // perfect match :D 
+                    // enemy is close to dp and we have max damage
+                    shoot(maxDamage.b);
+                    continue game_loop;
+                }
+                
+                Damage myDamageMe2E = me2e_Damage.stream().filter(d->d.b==minDistE2DP.a).findFirst().orElse(null);
+                int steps_e_2_dp = (int)minDistE2DP.dist/500;  // 500 dist per enemy move
+                int steps_e_2_kill = (int)(myDamageMe2E.b.life/myDamageMe2E.damage);
+                if (steps_e_2_dp <= steps_e_2_kill) {
+                    // no chance to kill the enemy before he take the dp
+                    skipEnemy.add(minDistE2DP.a);
+                    System.err.println("Ignore '"+myDamageMe2E.b+"'");
+                    System.err.println("\tMy damage to e: "+myDamageMe2E);
+                    System.err.println("\tSteps for e to dp - steps: "+steps_e_2_dp+", "+minDistE2DP);
+                    System.err.println("\tSteps to kill e - steps: "+steps_e_2_kill+", "+myDamageMe2E);
+                    continue;
+                }
+                
+                if (safe_place2go(minDistE2DP.a.pos)) {
+                    // a enemy is close to that dp, try to go to the enemy to increase our damage
+                    go(minDistE2DP.a);
+                    System.err.println("Go to '"+minDistE2DP.a+"'");
+                    continue game_loop;
+                }
+                if (safe_place2go(minDistE2DP.b.pos)) {
+                    // a enemy is close to that dp, try to go to the dp to increase our damage
+                    go(minDistE2DP.b);
+                    System.err.println("Go to '"+minDistE2DP.b+"'");
+                    continue game_loop;
+                }
+                
+                Distance<E, E> minDistE = me2e_Dist.stream().filter(d->!skipEnemy.contains(d.a)).min((d1,d2)->Float.compare(d1.dist, d2.dist)).orElse(null);
+                System.err.println("Min distance e to me: "+minDistE);
+                
+                if (minDistE.b == maxDamage.b) {
+                    // perfect match :D 
+                    // enemy is close to me and we have max damage
+                    shoot(maxDamage.b);
+                    continue game_loop;
+                }
+                
+                shoot(minDistE.b);
+                continue game_loop;
+            }
         }
     }
     
-    // enought safe distance between me and this enemy?
-    static boolean safe_distance(int idx) {return me2e_Dist.get(idx).dist>3000;}
-    
     // check if its safe to walk in the direction to this enemy
-    static boolean safe_place_if_go2e(int idx) {
+    static boolean safe_place2go(P pos) {
         
-        // check my next position agains all current enemies positions
-        P nextMe = getPointInBetweenByLen(me.pos, e.get(idx).pos, 1000); // 1000 dist per my move
+        // check my next position agains all "next" enemies positions
+        E nextMe = getPointInBetweenByLen(me.pos, pos, 1000); // I can go 1000 per step
         List<Distance<E, E>> _me2e_Dist = new ArrayList<>();
-        List<Damage> _me2e_Damage = new ArrayList<>();
         for (int i = 0; i < enemyCount; i++) {
-            _me2e_Dist.add(new Distance<E, E>(me, e.get(i)));
-            // calculate damages too
-            _me2e_Damage.add(new Damage(me, e.get(i)));
+            // here we can try to simulate the next pos of the enemy
+            E _e = e.get(i);
+            Distance<E, DP> closestDP4E = e2dp_Dist.stream().filter(d->d.a==_e).min((d1,d2)->Float.compare(d1.dist, d2.dist)).orElse(null);
+            E nextE = getPointInBetweenByLen(_e.pos, closestDP4E.b.pos, 500); // enemy can go 500 per step
+            _me2e_Dist.add(new Distance<E, E>(nextMe, nextE)); 
         }
-        List<Distance<E, E>> dangers = _me2e_Dist.stream().filter(d->d.dist<=2000).collect(Collectors.toList());
+        List<Distance<E, E>> dangers = _me2e_Dist.stream().filter(d->d.dist<=2000).collect(Collectors.toList()); // 2000 danger zone
         if (!dangers.isEmpty()) {
-            dangers.forEach(d->System.err.println("Enemy '"+d.b+"' is too near"));
+            System.err.println("Not save to go to: "+nextMe.pos);
+            dangers.forEach(d->System.err.println("\tEnemy '"+d.b+"' is too close"));
             return false;
         }
-
-        // TODO: check my next position agains all next enemies position (assume that each enemy go the "his" nex datapoint)
         
         return true;
     }
     
-    static void shoot(int idx) {System.out.println("SHOOT "+e.get(idx).id);}
-    static void go2e(int idx) {System.out.println("MOVE "+(int)e.get(idx).pos.x+" "+(int)e.get(idx).pos.y);}
+    static void shoot(E e) {System.out.println("SHOOT "+e.id);}
+    static void go(Node n) {System.out.println("MOVE "+(int)n.pos.x+" "+(int)n.pos.y);}
     
     static float damage(float distance) {return (float)(125000f/Math.pow(distance, 1.2f));}
     
@@ -185,8 +217,9 @@ class Player {
     static String dp(int idx) {return dp.get(idx).toString(); }
     
     // arithmetics 
-    static P getPointInBetweenByLen(P a, P b, int length) {
-        return a.cp().add(b.cp().sub(a).norm().mul(length));
+    static E getPointInBetweenByLen(P a, P b, int length) {
+        P nextP = a.cp().add(b.cp().sub(a).norm().mul(length));
+        return E.of(-1, -1, nextP.x, nextP.y, Integer.MAX_VALUE);
     }
 
 }
